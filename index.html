@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PoE Resistance Optimizer</title>
+
+<style>
+body{
+    background:#111;
+    color:white;
+    font-family:Arial,Helvetica,sans-serif;
+    max-width:1000px;
+    margin:auto;
+    padding:16px;
+}
+
+.top-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.col{flex:1;min-width:140px}
+
+table{width:100%;border-collapse:collapse;margin-top:12px}
+td,th{border:1px solid #333;padding:8px}
+
+input,select,button{background:#222;color:white;border:none;padding:8px}
+input,select{width:100%}
+
+button{background:#2979ff;color:white;padding:8px 10px;margin:6px;cursor:pointer;border-radius:4px}
+
+.result{margin-top:18px;font-size:15px}
+
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+.modifiers-wrap{overflow:auto}
+
+/* responsive */
+@media (max-width:600px){
+  body{padding:12px}
+  td,th{padding:6px;font-size:13px}
+  button{padding:8px}
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>PoE Resistance Optimizer</h1>
+
+<h3>Current Totals</h3>
+
+<table>
+
+<tr>
+<td>Fire</td>
+<td><input id="fire" value="0"></td>
+
+<td>Cold</td>
+<td><input id="cold" value="0"></td>
+
+<td>Lightning</td>
+<td><input id="light" value="0"></td>
+</tr>
+
+</table>
+
+<h3>Convertible Modifiers</h3>
+
+<table id="modifiers">
+
+<tr>
+<th>Current Type</th>
+<th>Current Value</th>
+<th>Minimum</th>
+<th>Slot</th>
+<th>Actions</th>
+</tr>
+
+</table>
+
+<div class="controls">
+  <div class="col">
+    <label>Target cap</label>
+    <select id="target">
+      <option value="75">75</option>
+      <option value="76">76</option>
+      <option value="77">77</option>
+      <option value="78">78</option>
+      <option value="79">79</option>
+      <option value="80">80</option>
+      <option value="85">85</option>
+    </select>
+  </div>
+  <div class="col">
+    <label>Build storage</label>
+    <div style="display:flex;gap:6px">
+      <button onclick="saveBuild()">Save Build</button>
+      <button onclick="loadLastBuild()">Load Last</button>
+      <button onclick="triggerFileLoad()">Load File</button>
+      <input id="filein" type="file" style="display:none" accept="application/json" onchange="handleFileLoad(event)">
+    </div>
+  </div>
+  <div class="col">
+    <label>Actions</label>
+    <div style="display:flex;gap:6px">
+      <button onclick="addModifier()">Add Modifier</button>
+      <button onclick="clearModifiers()">Clear</button>
+      <button onclick="solve()">Solve</button>
+    </div>
+  </div>
+</div>
+
+<div class="result" id="result"></div>
+
+<script>
+
+function createModifierRow(){
+  const row=document.createElement('tr');
+  row.innerHTML=`
+  <td>
+    <select>
+      <option value="Fire">Fire</option>
+      <option value="Cold">Cold</option>
+      <option value="Lightning">Lightning</option>
+    </select>
+  </td>
+  <td><input value="0" type="number"></td>
+  <td><input value="0" type="number"></td>
+  <td>
+    <select>
+      <option>Helm</option>
+      <option>Ring1</option>
+      <option>Ring2</option>
+      <option>Body</option>
+      <option>Boots</option>
+      <option>Gloves</option>
+      <option>Belt</option>
+    </select>
+  </td>
+  <td><button class="del">Delete</button></td>
+  `;
+  row.querySelector('.del').addEventListener('click',()=>row.remove());
+  return row;
+}
+
+function addModifier(){
+  const t=document.getElementById('modifiers');
+  const row=createModifierRow();
+  t.appendChild(row);
+}
+
+function clearModifiers(){
+  const t=document.getElementById('modifiers');
+  // remove all rows except header
+  [...t.querySelectorAll('tr')].slice(1).forEach(r=>r.remove());
+}
+
+// file load/save
+function saveBuild(){
+  const data=collectBuild();
+  localStorage.setItem('resi_last_build',JSON.stringify(data));
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='resi-build.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function loadLastBuild(){
+  const raw=localStorage.getItem('resi_last_build');
+  if(!raw){alert('No saved build in localStorage');return}
+  applyBuild(JSON.parse(raw));
+}
+
+function triggerFileLoad(){document.getElementById('filein').click();}
+
+function handleFileLoad(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader(); r.onload=()=>{
+    try{applyBuild(JSON.parse(r.result))}catch(e){alert('Invalid file')}
+  };
+  r.readAsText(f);
+}
+
+function collectBuild(){
+  const fire=parseInt(document.getElementById('fire').value)||0;
+  const cold=parseInt(document.getElementById('cold').value)||0;
+  const light=parseInt(document.getElementById('light').value)||0;
+  const target=parseInt(document.getElementById('target').value)||75;
+  const rows=[...document.querySelectorAll('#modifiers tr')].slice(1);
+  const modifiers=rows.map(r=>({
+    type:r.cells[0].children[0].value,
+    current:parseInt(r.cells[1].children[0].value)||0,
+    min:parseInt(r.cells[2].children[0].value)||0,
+    slot:r.cells[3].children[0].value||'Helm'
+  }));
+  return {fire,cold,light,target,modifiers};
+}
+
+function applyBuild(data){
+  document.getElementById('fire').value=data.fire||0;
+  document.getElementById('cold').value=data.cold||0;
+  document.getElementById('light').value=data.light||0;
+  if(data.target) document.getElementById('target').value=data.target;
+  clearModifiers();
+    for(const c of data.modifiers||[]){
+      const row=createModifierRow();
+      row.cells[0].children[0].value=c.type||'Fire';
+      row.cells[1].children[0].value=c.current||0;
+      row.cells[2].children[0].value=c.min||0;
+      row.cells[3].children[0].value=c.slot||'Helm';
+      document.getElementById('modifiers').appendChild(row);
+    }
+}
+
+// initial one modifier
+addModifier();
+
+// Branch-and-bound solver returning top 10 solutions
+function solve(){
+  const TARGET=parseInt(document.getElementById('target').value)||75;
+  let fire0=parseInt(document.getElementById('fire').value)||0;
+  let cold0=parseInt(document.getElementById('cold').value)||0;
+  let light0=parseInt(document.getElementById('light').value)||0;
+
+  const rows=[...document.querySelectorAll('#modifiers tr')].slice(1);
+  const modifiers=[];
+  for(const r of rows){
+    const type=r.cells[0].children[0].value;
+    const current=parseInt(r.cells[1].children[0].value)||0;
+    const min=parseInt(r.cells[2].children[0].value)||0;
+    const slot=r.cells[3].children[0].value||'Helm';
+    modifiers.push({type,current,min,slot});
+    if(type==='Fire') fire0-=current;
+    if(type==='Cold') cold0-=current;
+    if(type==='Lightning') light0-=current;
+  }
+
+  // simplified solver: always use lowest (min) for conversions; kept modifiers fixed at current
+  const top=[]; // keep only the best
+
+  function insertTop(sol){
+    if(top.length===0) { top.push(sol); return; }
+    const a=top[0], b=sol;
+    // compare by numReached, then overflow, then totalAbs
+    if(b.numReached> a.numReached || (b.numReached===a.numReached && b.overflow < a.overflow) || (b.numReached===a.numReached && b.overflow===a.overflow && b.totalAbs < a.totalAbs)){
+      top[0]=b;
+    }
+  }
+
+  function consider(plan,f,c,l){
+    const numReached=(f>=TARGET?1:0)+(c>=TARGET?1:0)+(l>=TARGET?1:0);
+    const overflow=(f>TARGET?f-TARGET:0)+(c>TARGET?c-TARGET:0)+(l>TARGET?l-TARGET:0);
+    const totalAbs=Math.abs(f-TARGET)+Math.abs(c-TARGET)+Math.abs(l-TARGET);
+    const fluxCount={Blazing:0,Chilling:0,Crackling:0};
+    for(const a of plan){
+      const original=modifiers[a.i].type;
+      const assigned=a.type;
+      if(original!==assigned){
+        if(assigned==='Fire') fluxCount.Blazing++;
+        if(assigned==='Cold') fluxCount.Chilling++;
+        if(assigned==='Lightning') fluxCount.Crackling++;
+      }
+    }
+    insertTop({plan:[...plan],f,c,l,numReached,overflow,totalAbs,fluxCount});
+  }
+
+  function dfs(i,f,c,l,plan){
+    if(i===modifiers.length){ consider(plan,f,c,l); return; }
+
+    const ch=modifiers[i];
+    // if keeping the same modifier, value fixed to current
+    // if converting, always use ch.min (user requested lowest only)
+
+    // Assign to Fire
+    if(ch.type==='Fire'){
+      const v=ch.current; dfs(i+1,f+v,c,l,plan.concat([{i, type:'Fire', value:v}]));
+    } else {
+      const v=ch.min; dfs(i+1,f+v,c,l,plan.concat([{i, type:'Fire', value:v}]));
+    }
+    // Assign to Cold
+    if(ch.type==='Cold'){
+      const v=ch.current; dfs(i+1,f,c+v,l,plan.concat([{i, type:'Cold', value:v}]));
+    } else {
+      const v=ch.min; dfs(i+1,f,c+v,l,plan.concat([{i, type:'Cold', value:v}]));
+    }
+    // Assign to Lightning
+    if(ch.type==='Lightning'){
+      const v=ch.current; dfs(i+1,f,c,l+v,plan.concat([{i, type:'Lightning', value:v}]));
+    } else {
+      const v=ch.min; dfs(i+1,f,c,l+v,plan.concat([{i, type:'Lightning', value:v}]));
+    }
+  }
+
+  // baseline = no conversion
+  const baselineNumReached=(fire0>=TARGET?1:0)+(cold0>=TARGET?1:0)+(light0>=TARGET?1:0);
+  const baselineOverflow=(fire0>TARGET?fire0-TARGET:0)+(cold0>TARGET?cold0-TARGET:0)+(light0>TARGET?light0-TARGET:0);
+  const baselineTotalAbs=Math.abs(fire0-TARGET)+Math.abs(cold0-TARGET)+Math.abs(light0-TARGET);
+
+  dfs(0,fire0,cold0,light0,[]);
+
+  // render only the top solution with conversion-range offsets
+  let html='<h2>Best solution</h2>';
+  if(top.length===0) html+='<div>No solutions found</div>';
+  else {
+    const s=top[0];
+    // compute per-element totals assuming lowest (min) for any conversion; kept modifiers fixed at current
+    const baseF=fire0, baseC=cold0, baseL=light0;
+    let fMin=baseF, cMin=baseC, lMin=baseL;
+    for(const a of s.plan){
+      const ch=modifiers[a.i];
+      if(a.type===ch.type){
+        // kept modifier: fixed to current
+        if(a.type==='Fire') fMin+=ch.current;
+        if(a.type==='Cold') cMin+=ch.current;
+        if(a.type==='Lightning') lMin+=ch.current;
+      } else {
+        // conversion uses minimum only
+        if(a.type==='Fire') fMin+=ch.min;
+        if(a.type==='Cold') cMin+=ch.min;
+        if(a.type==='Lightning') lMin+=ch.min;
+      }
+    }
+
+    const fMax=fMin, cMax=cMin, lMax=lMin;
+
+    function offSingle(val,target){
+      const off = val - target;
+      return {off};
+    }
+
+    const fOff = offSingle(fMin,TARGET);
+    const cOff = offSingle(cMin,TARGET);
+    const lOff = offSingle(lMin,TARGET);
+
+    // compare best to baseline; show message if not strictly better
+    const bestIsBetter = (s.numReached> baselineNumReached) || (s.numReached===baselineNumReached && s.overflow < baselineOverflow) || (s.numReached===baselineNumReached && s.overflow===baselineOverflow && s.totalAbs < baselineTotalAbs);
+    html+=`<div style="border:1px solid #333;padding:12px;margin:8px 0;border-radius:6px;background:#0f0f12">`;
+    if(!bestIsBetter){
+      html+=`<div><strong>No conversion yields an improvement over your current totals.</strong></div>`;
+      html+=`<div style="margin-top:8px"><strong>Current totals:</strong> Fire: ${fire0} &nbsp; Cold: ${cold0} &nbsp; Lightning: ${light0}</div>`;
+      html+=`<div style="margin-top:8px">Reached: ${baselineNumReached}/3 — Overflow: ${baselineOverflow} — AbsDiff: ${baselineTotalAbs}</div>`;
+      html+=`</div>`;
+      document.getElementById('result').innerHTML=html;
+      return;
+    }
+
+    html+=`<div><strong>Reached:</strong> ${s.numReached}/3 &nbsp; <strong>Overflow:</strong> ${s.overflow} &nbsp; <strong>AbsDiff:</strong> ${s.totalAbs}</div>`;
+    html+=`<div style="margin-top:8px"><strong>Totals (chosen values, min conversions):</strong> Fire: ${s.f} &nbsp; Cold: ${s.c} &nbsp; Lightning: ${s.l}</div>`;
+    html+=`<div style="margin-top:8px"><strong>Assumed totals (minimum conversions):</strong></div>`;
+    html+=`<div style="margin-top:6px">Fire: ${fMin} (off by ${fOff.off})</div>`;
+    html+=`<div>Cold: ${cMin} (off by ${cOff.off})</div>`;
+    html+=`<div>Lightning: ${lMin} (off by ${lOff.off})</div>`;
+
+    html+=`<div style="margin-top:8px"><strong>Fluxes needed:</strong> Blazing: ${s.fluxCount.Blazing} — Chilling: ${s.fluxCount.Chilling} — Crackling: ${s.fluxCount.Crackling}</div>`;
+
+    html+=`<table style="width:100%;margin-top:8px">`;
+    html+=`<tr style="background:#1a1a1a"><th>Modifier</th><th>Slot</th><th>From</th><th>To</th><th>Value</th><th>Flux?</th></tr>`;
+    for(const a of s.plan){
+      const from=modifiers[a.i].type;
+      const to=a.type;
+      const slot=modifiers[a.i].slot||'';
+      const needFlux = from!==to;
+      const fluxName = to==='Fire'? 'Blazing Flux' : (to==='Cold'? 'Chilling Flux' : 'Crackling Flux');
+      const fluxCell = needFlux ? fluxName : 'Keep modifier';
+      html+=`<tr><td>#${a.i+1}</td><td>${slot}</td><td>${from}</td><td>${to}</td><td>${a.value}</td><td>${fluxCell}</td></tr>`;
+    }
+    html+=`</table>`;
+    html+=`</div>`;
+  }
+  document.getElementById('result').innerHTML=html;
+}
+
+</script>
+</body>
+
+</html>
