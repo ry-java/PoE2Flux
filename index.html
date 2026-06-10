@@ -108,6 +108,14 @@ button{background:#2979ff;color:white;padding:8px 10px;margin:6px;cursor:pointer
 
 <div class="result" id="result"></div>
 
+<!-- Example Usage collapsible (shows ss1.png from project root) -->
+<div class="example-usage" style="margin-top:10px">
+  <button id="exToggle" onclick="toggleExample()" style="background:#1b1b1b;color:white;border:1px solid #333;padding:8px 12px;border-radius:6px;cursor:pointer">Example Usage ▾</button>
+  <div id="exContent" style="display:none;margin-top:10px">
+    <img src="ss1.png" alt="Example Usage" style="max-width:100%;border:1px solid #333;border-radius:6px;background:#000;padding:6px" />
+  </div>
+</div>
+
 <script>
 
 function createModifierRow(){
@@ -319,6 +327,22 @@ function solve(){
   document.getElementById('result').innerHTML=html;
 }
 
+</script>
+
+<script>
+// Toggle the Example Usage collapsible added below the result area
+function toggleExample(){
+  const content=document.getElementById('exContent');
+  const btn=document.getElementById('exToggle');
+  if(!content) return;
+  if(content.style.display==='none' || content.style.display===''){
+    content.style.display='block';
+    btn.innerText='Example Usage ▴';
+  } else {
+    content.style.display='none';
+    btn.innerText='Example Usage ▾';
+  }
+}
 </script>
 </body>
 
