@@ -93,10 +93,8 @@ button{background:#2979ff;color:white;padding:8px 10px;margin:6px;cursor:pointer
     </select>
   </div>
   <div class="col">
-    <label>Build storage</label>
+    <label>Build</label>
     <div style="display:flex;gap:6px">
-      <button onclick="saveBuild()">Save Build</button>
-      <button onclick="loadLastBuild()">Load Last</button>
       <button onclick="triggerFileLoad()">Load File</button>
       <input id="filein" type="file" style="display:none" accept="application/json" onchange="handleFileLoad(event)">
     </div>
@@ -156,23 +154,7 @@ function clearModifiers(){
   [...t.querySelectorAll('tr')].slice(1).forEach(r=>r.remove());
 }
 
-// file load/save
-function saveBuild(){
-  const data=collectBuild();
-  localStorage.setItem('resi_last_build',JSON.stringify(data));
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download='resi-build.json'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-function loadLastBuild(){
-  const raw=localStorage.getItem('resi_last_build');
-  if(!raw){alert('No saved build in localStorage');return}
-  applyBuild(JSON.parse(raw));
-}
-
+// file load
 function triggerFileLoad(){document.getElementById('filein').click();}
 
 function handleFileLoad(ev){
@@ -220,9 +202,15 @@ addModifier();
 // Branch-and-bound solver returning top 10 solutions
 function solve(){
   const TARGET=parseInt(document.getElementById('target').value)||75;
-  let fire0=parseInt(document.getElementById('fire').value)||0;
-  let cold0=parseInt(document.getElementById('cold').value)||0;
-  let light0=parseInt(document.getElementById('light').value)||0;
+  // original totals as entered by the user (including current modifiers)
+  const origFire=parseInt(document.getElementById('fire').value)||0;
+  const origCold=parseInt(document.getElementById('cold').value)||0;
+  const origLight=parseInt(document.getElementById('light').value)||0;
+
+  // compute base totals with modifiers removed (we'll add chosen values back during search)
+  let baseFire=origFire;
+  let baseCold=origCold;
+  let baseLight=origLight;
 
   const rows=[...document.querySelectorAll('#modifiers tr')].slice(1);
   const modifiers=[];
@@ -232,9 +220,10 @@ function solve(){
     const min=parseInt(r.cells[2].children[0].value)||0;
     const slot=r.cells[3].children[0].value||'Helm';
     modifiers.push({type,current,min,slot});
-    if(type==='Fire') fire0-=current;
-    if(type==='Cold') cold0-=current;
-    if(type==='Lightning') light0-=current;
+    // subtract current modifier values from base totals
+    if(type==='Fire') baseFire-=current;
+    if(type==='Cold') baseCold-=current;
+    if(type==='Lightning') baseLight-=current;
   }
 
   // simplified solver: always use lowest (min) for conversions; kept modifiers fixed at current
@@ -293,12 +282,13 @@ function solve(){
     }
   }
 
-  // baseline = no conversion
-  const baselineNumReached=(fire0>=TARGET?1:0)+(cold0>=TARGET?1:0)+(light0>=TARGET?1:0);
-  const baselineOverflow=(fire0>TARGET?fire0-TARGET:0)+(cold0>TARGET?cold0-TARGET:0)+(light0>TARGET?light0-TARGET:0);
-  const baselineTotalAbs=Math.abs(fire0-TARGET)+Math.abs(cold0-TARGET)+Math.abs(light0-TARGET);
+  // baseline = no conversion using the original totals (including current modifiers)
+  const baselineNumReached=(origFire>=TARGET?1:0)+(origCold>=TARGET?1:0)+(origLight>=TARGET?1:0);
+  const baselineOverflow=(origFire>TARGET?origFire-TARGET:0)+(origCold>TARGET?origCold-TARGET:0)+(origLight>TARGET?origLight-TARGET:0);
+  const baselineTotalAbs=Math.abs(origFire-TARGET)+Math.abs(origCold-TARGET)+Math.abs(origLight-TARGET);
 
-  dfs(0,fire0,cold0,light0,[]);
+  // run search starting from base totals without modifiers
+  dfs(0,baseFire,baseCold,baseLight,[]);
 
   // render only the top solution with conversion-range offsets
   let html='<h2>Best solution</h2>';
@@ -306,7 +296,7 @@ function solve(){
   else {
     const s=top[0];
     // compute per-element totals assuming lowest (min) for any conversion; kept modifiers fixed at current
-    const baseF=fire0, baseC=cold0, baseL=light0;
+    const baseF=baseFire, baseC=baseCold, baseL=baseLight;
     let fMin=baseF, cMin=baseC, lMin=baseL;
     for(const a of s.plan){
       const ch=modifiers[a.i];
@@ -339,7 +329,7 @@ function solve(){
     html+=`<div style="border:1px solid #333;padding:12px;margin:8px 0;border-radius:6px;background:#0f0f12">`;
     if(!bestIsBetter){
       html+=`<div><strong>No conversion yields an improvement over your current totals.</strong></div>`;
-      html+=`<div style="margin-top:8px"><strong>Current totals:</strong> Fire: ${fire0} &nbsp; Cold: ${cold0} &nbsp; Lightning: ${light0}</div>`;
+      html+=`<div style="margin-top:8px"><strong>Current totals:</strong> Fire: ${origFire} &nbsp; Cold: ${origCold} &nbsp; Lightning: ${origLight}</div>`;
       html+=`<div style="margin-top:8px">Reached: ${baselineNumReached}/3 — Overflow: ${baselineOverflow} — AbsDiff: ${baselineTotalAbs}</div>`;
       html+=`</div>`;
       document.getElementById('result').innerHTML=html;
