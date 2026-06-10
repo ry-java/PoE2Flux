@@ -94,10 +94,7 @@ button{background:#2979ff;color:white;padding:8px 10px;margin:6px;cursor:pointer
   </div>
   <div class="col">
     <label>Build</label>
-    <div style="display:flex;gap:6px">
-      <button onclick="triggerFileLoad()">Load File</button>
-      <input id="filein" type="file" style="display:none" accept="application/json" onchange="handleFileLoad(event)">
-    </div>
+    <div style="display:flex;gap:6px"></div>
   </div>
   <div class="col">
     <label>Actions</label>
@@ -154,47 +151,7 @@ function clearModifiers(){
   [...t.querySelectorAll('tr')].slice(1).forEach(r=>r.remove());
 }
 
-// file load
-function triggerFileLoad(){document.getElementById('filein').click();}
-
-function handleFileLoad(ev){
-  const f=ev.target.files[0]; if(!f) return;
-  const r=new FileReader(); r.onload=()=>{
-    try{applyBuild(JSON.parse(r.result))}catch(e){alert('Invalid file')}
-  };
-  r.readAsText(f);
-}
-
-function collectBuild(){
-  const fire=parseInt(document.getElementById('fire').value)||0;
-  const cold=parseInt(document.getElementById('cold').value)||0;
-  const light=parseInt(document.getElementById('light').value)||0;
-  const target=parseInt(document.getElementById('target').value)||75;
-  const rows=[...document.querySelectorAll('#modifiers tr')].slice(1);
-  const modifiers=rows.map(r=>({
-    type:r.cells[0].children[0].value,
-    current:parseInt(r.cells[1].children[0].value)||0,
-    min:parseInt(r.cells[2].children[0].value)||0,
-    slot:r.cells[3].children[0].value||'Helm'
-  }));
-  return {fire,cold,light,target,modifiers};
-}
-
-function applyBuild(data){
-  document.getElementById('fire').value=data.fire||0;
-  document.getElementById('cold').value=data.cold||0;
-  document.getElementById('light').value=data.light||0;
-  if(data.target) document.getElementById('target').value=data.target;
-  clearModifiers();
-    for(const c of data.modifiers||[]){
-      const row=createModifierRow();
-      row.cells[0].children[0].value=c.type||'Fire';
-      row.cells[1].children[0].value=c.current||0;
-      row.cells[2].children[0].value=c.min||0;
-      row.cells[3].children[0].value=c.slot||'Helm';
-      document.getElementById('modifiers').appendChild(row);
-    }
-}
+// build import/export removed per user request
 
 // initial one modifier
 addModifier();
